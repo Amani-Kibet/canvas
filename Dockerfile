@@ -27,7 +27,6 @@
   # -----------------------------
   USER root
   
-  # Allow host-mounted volumes to write correctly
   ARG USER_ID
   RUN if [ -n "$USER_ID" ]; then \
         usermod -u "$USER_ID" docker; \
@@ -35,50 +34,69 @@
       fi
   
   # -----------------------------
-  # Install keyrings & repos
+  # Create keyrings folder
   # -----------------------------
   RUN mkdir -p /etc/apt/keyrings
   
-  # Node.js key
+  # -----------------------------
+  # NodeSource repo
+  # -----------------------------
+  ARG NODE_MAJOR=20
   RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-  RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
-      > /etc/apt/sources.list.d/nodesource.list
+      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+      CODENAME=$(grep '^VERSION_CODENAME=' /etc/os-release | cut -d= -f2) && \
+      echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x ${CODENAME} main" \
+        > /etc/apt/sources.list.d/nodesource.list
   
-  # Yarn key
+  # -----------------------------
+  # Yarn repo
+  # -----------------------------
   RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg \
-      | gpg --dearmor -o /etc/apt/keyrings/yarn.gpg
-  RUN echo "deb [signed-by=/etc/apt/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" \
-      > /etc/apt/sources.list.d/yarn.list
+      | gpg --dearmor -o /etc/apt/keyrings/yarn.gpg && \
+      echo "deb [signed-by=/etc/apt/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" \
+        > /etc/apt/sources.list.d/yarn.list
   
-  # PostgreSQL key
-  RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
-  RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" \
-      > /etc/apt/sources.list.d/pgdg.list
+  # -----------------------------
+  # PostgreSQL repo
+  # -----------------------------
+  RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /etc/apt/keyrings/pgdg.gpg && \
+      CODENAME=$(grep '^VERSION_CODENAME=' /etc/os-release | cut -d= -f2) && \
+      echo "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt/ ${CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list
   
+  # -----------------------------
+  # Update repositories
+  # -----------------------------
+  RUN apt-get update -y
+  
+  # Install essentials before add-apt-repository
+  RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        apt-utils software-properties-common curl gnupg lsb-release ca-certificates
+  
+  # -----------------------------
   # Git PPA
-  RUN add-apt-repository ppa:git-core/ppa -ny
+  # -----------------------------
+  RUN add-apt-repository ppa:git-core/ppa -ny || true
   
   # -----------------------------
-  # Update & install packages (fixed)
+  # Install dependencies
   # -----------------------------
+  ENV DEBIAN_FRONTEND=noninteractive
+  
   RUN apt-get update && \
-      apt-get install -y --no-install-recommends apt-utils software-properties-common curl gnupg lsb-release && \
-      # Install smaller chunks to avoid dependency issues
       apt-get install -y --no-install-recommends \
-          nodejs python3-lxml python-is-python3 tzdata unzip pbzip2 git && \
+        nodejs python3 python3-lxml tzdata unzip pbzip2 git && \
       apt-get install -y --no-install-recommends \
-          libxmlsec1-dev libicu-dev libidn11-dev libgpg-error-dev parallel postgresql-client-$POSTGRES_CLIENT fontforge build-essential && \
-      # Fix broken dependencies just in case
+        libxmlsec1-dev libicu-dev libidn11-dev libgpg-error-dev \
+        parallel postgresql-client-${POSTGRES_CLIENT} fontforge build-essential && \
       apt-get install -f -y && \
       rm -rf /var/lib/apt/lists/*
-  
-  # Ensure gem directory exists
-  RUN mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
   
   # -----------------------------
   # Ruby & Node setup
   # -----------------------------
+  RUN mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
   RUN gem install bundler --no-document -v 2.5.10
   RUN find $GEM_HOME ! -user docker | xargs chown docker:docker
   RUN npm install -g npm@9.8.1
@@ -110,8 +128,8 @@
         tmp \
         /home/docker/.bundle/ \
         /home/docker/.cache/yarn \
-        /home/docker/.gem/ \
-      && chown -R docker:docker \
+        /home/docker/.gem/ && \
+      chown -R docker:docker \
         .yardoc log tmp node_modules public/dist \
         /home/docker/.bundle /home/docker/.cache/yarn /home/docker/.gem
   
@@ -121,7 +139,7 @@
   COPY --chown=docker:docker . .
   
   # -----------------------------
-  # Default command
+  # Default CMD
   # -----------------------------
   CMD ["rails", "server", "-b", "0.0.0.0"]
   
