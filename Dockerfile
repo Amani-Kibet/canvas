@@ -60,26 +60,18 @@
   RUN add-apt-repository ppa:git-core/ppa -ny
   
   # -----------------------------
-  # Update & install packages
+  # Update & install packages (fixed)
   # -----------------------------
-  RUN apt-get update \
-      && apt-get install -y --no-install-recommends \
-          nodejs \
-          libxmlsec1-dev \
-          python3-lxml \
-          python-is-python3 \
-          libicu-dev \
-          libidn11-dev \
-          libgpg-error-dev \
-          parallel \
-          postgresql-client-$POSTGRES_CLIENT \
-          tzdata \
-          unzip \
-          pbzip2 \
-          fontforge \
-          git \
-          build-essential \
-      && rm -rf /var/lib/apt/lists/*
+  RUN apt-get update && \
+      apt-get install -y --no-install-recommends apt-utils software-properties-common curl gnupg lsb-release && \
+      # Install smaller chunks to avoid dependency issues
+      apt-get install -y --no-install-recommends \
+          nodejs python3-lxml python-is-python3 tzdata unzip pbzip2 git && \
+      apt-get install -y --no-install-recommends \
+          libxmlsec1-dev libicu-dev libidn11-dev libgpg-error-dev parallel postgresql-client-$POSTGRES_CLIENT fontforge build-essential && \
+      # Fix broken dependencies just in case
+      apt-get install -f -y && \
+      rm -rf /var/lib/apt/lists/*
   
   # Ensure gem directory exists
   RUN mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
