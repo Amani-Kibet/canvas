@@ -1,0 +1,11 @@
+---
+skip_blueprint_module_downstream_changes:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Skip blueprint module downstream changes on deletion
+  description: When enabled, prevents marking downstream changes on modules when syncing blueprint course deletions
+skip_reactivating_deleted_attachments:
+  state: hidden
+  applies_to: RootAccount
+  display_name: Skip reactivating deleted attachments on import
+  description: When enabled, importing course content attachments will not reactivate previously deleted ones
