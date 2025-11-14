@@ -1,7 +1,3 @@
-# GENERATED FILE, DO NOT MODIFY!
-# To update this file please edit the relevant template and run the generation
-# task `build/dockerfile_writer.rb --env development --compose-file inst-cli/docker-compose/docker-compose.local.dev.yml --in build/Dockerfile.template --out Dockerfile`
-
 ARG RUBY=3.4
 
 FROM instructure/ruby-passenger:$RUBY-jammy
@@ -25,15 +21,9 @@ ENV PATH ${APP_HOME}bin:$GEM_HOME/bin:$PATH
 ENV BUNDLE_APP_CONFIG /home/docker/.bundle
 
 WORKDIR $APP_HOME
-
 USER root
 
-ARG USER_ID
-# This step allows docker to write files to a host-mounted volume with the correct user permissions.
-# Without it, some linux distributions are unable to write at all to the host mounted volume.
-RUN if [ -n "$USER_ID" ]; then usermod -u "${USER_ID}" docker \
-        && chown --from=9999 docker /usr/src/nginx /usr/src/app -R; fi
-
+# Install packages
 RUN mkdir -p /etc/apt/keyrings \
   && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
   && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
@@ -62,17 +52,18 @@ RUN mkdir -p /etc/apt/keyrings \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
 
+# Install bundler & npm
 RUN gem install bundler --no-document -v 2.5.10 \
   && find $GEM_HOME ! -user docker | xargs chown docker:docker
 RUN npm install -g npm@9.8.1 && npm cache clean --force
-
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable && corepack prepare yarn@1.19.1 --activate
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
+# Switch to docker user
 USER docker
 
-RUN set -eux; \
-  mkdir -p \
+# Ensure all writable directories are owned by docker
+RUN mkdir -p \
     .yardoc \
     app/stylesheets/brandable_css_brands \
     app/views/info \
@@ -89,4 +80,11 @@ RUN set -eux; \
     tmp \
     /home/docker/.bundle/ \
     /home/docker/.cache/yarn \
-    /home/docker/.gem/
+    /home/docker/.gem/ \
+  && chown -R docker:docker log tmp node_modules public/dist .yardoc
+
+# Copy your project files
+COPY . .
+
+# Default command (adjust as needed)
+CMD ["rails", "server", "-b", "0.0.0.0"]
