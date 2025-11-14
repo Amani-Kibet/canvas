@@ -23,24 +23,27 @@ ENV BUNDLE_APP_CONFIG /home/docker/.bundle
 WORKDIR $APP_HOME
 USER root
 
-# Install packages
+# -----------------------
+# Install packages (show errors)
+# -----------------------
 RUN mkdir -p /etc/apt/keyrings \
   && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
   && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor -o /etc/apt/keyrings/yarn.gpg \
-  && echo "deb [signed-by=/etc/apt/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list \
+  && echo "deb [signed-by=/etc/apt/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list \
   && printf 'path-exclude /usr/share/doc/*\npath-exclude /usr/share/man/*' > /etc/dpkg/dpkg.cfg.d/01_nodoc \
   && echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && curl -sS https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
   && add-apt-repository ppa:git-core/ppa -ny \
-  && apt-get update -qq \
-  && apt-get install -qqy --no-install-recommends \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
        nodejs \
        libxmlsec1-dev \
        python3-lxml \
        python-is-python3 \
        libicu-dev \
        libidn11-dev \
+       libgpg-error-dev \
        parallel \
        postgresql-client-$POSTGRES_CLIENT \
        tzdata \
@@ -52,17 +55,23 @@ RUN mkdir -p /etc/apt/keyrings \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
 
-# Install bundler & npm
+# -----------------------
+# Ruby & Node setup
+# -----------------------
 RUN gem install bundler --no-document -v 2.5.10 \
   && find $GEM_HOME ! -user docker | xargs chown docker:docker
-RUN npm install -g npm@9.8.1 && npm cache clean --force
+RUN npm install -g npm@9.8.1
 RUN corepack enable && corepack prepare yarn@1.19.1 --activate
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
+# -----------------------
 # Switch to docker user
+# -----------------------
 USER docker
 
-# Ensure all writable directories are owned by docker
+# -----------------------
+# Writable directories
+# -----------------------
 RUN mkdir -p \
     .yardoc \
     app/stylesheets/brandable_css_brands \
@@ -83,8 +92,12 @@ RUN mkdir -p \
     /home/docker/.gem/ \
   && chown -R docker:docker log tmp node_modules public/dist .yardoc
 
-# Copy your project files
-COPY . .
+# -----------------------
+# Copy project files
+# -----------------------
+COPY --chown=docker:docker . .
 
-# Default command (adjust as needed)
+# -----------------------
+# Default command
+# -----------------------
 CMD ["rails", "server", "-b", "0.0.0.0"]
